@@ -5,7 +5,7 @@ const hdkey = require('ethereumjs-wallet/hdkey');
 const bip39 = require('bip39');
 const TestRPC = require('ethereumjs-testrpc');
 
-const ACCOUNTS = 100;
+const ACCOUNTS = 1000;
 const ACCOUNTFUNDING = '0x33B2E3C9FD0804000000000'; // One billion Ether in Wei
 const HDPATH = 'm/44\'/60\'/0\'/0/';
 
@@ -58,4 +58,3 @@ truffle.stderr.on('data', (data) => {
 truffle.on('exit', (code) => {
   process.exit(code);
 });
-

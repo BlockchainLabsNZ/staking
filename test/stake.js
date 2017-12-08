@@ -10,19 +10,22 @@ const EthRPC = require('ethjs-rpc');
 const EthQuery = require('ethjs-query');
 const Web3 = require('web3');
 
-
 const ethRPC = new EthRPC(new HttpProvider('http://localhost:8545'));
 const ethQuery = new EthQuery(new HttpProvider('http://localhost:8545'));
 const web3 = new Web3(new Web3.providers.HttpProvider('http://localhost:8545'));
+const stakeJson = require('../build/contracts/Stake.json');
+const stakeConf = require('../conf/stake.json');
 
 contract('Stake Levs', (accounts) => {
-  let token, stake;
+  let token, stake, fee;
 
   before(async function () {
     token = await HumanStandardToken.new(100000, "LEV", 0, "LEV");
+    fee = await HumanStandardToken.new(100000, "FEE", 0, "FEE");
     await token.transfer(user1(accounts), 100);
     await token.transfer(user2(accounts), 200);
     stake = await Stake.deployed();
+    await stake.setFeeToken(fee.address);
     await stake.startNewStakingInterval(100, 300, {from: operator(accounts)});
     await token.transfer(stake.address, 1000);
     await stake.setLevToken(token.address);
@@ -46,7 +49,43 @@ contract('Stake Levs', (accounts) => {
     expect((await stake.levBlocks(user1(accounts))).toNumber()).to.be.eql(10 * 98 + 15 * 48);
     expect((await stake.levBlocks(user2(accounts))).toNumber()).to.be.eql(15 * 96 + 20 * 46);
   });
+
+  it('should test the limits of the function redeemLevAndFeeToStakers()', async function () {
+    const numberOfAccounts = 134;
+    const accountsArray = accounts.slice(0, numberOfAccounts);
+    const stakeDetails = await new web3.eth.Contract(stakeJson.abi, {gas: 5e6, from: accounts[0]});
+    stake = await stakeDetails.deploy({
+      data: stakeJson.bytecode,
+      arguments: [stakeConf.owners, stakeConf.operator, stakeConf.wallet, stakeConf.weiPerFee, stakeConf.levid]
+    }).send({
+      from: accounts[0],
+      gas: 5e6
+    });
+    token = await HumanStandardToken.new(100000, "LEV", 0, "LEV");
+    fee = await HumanStandardToken.new(100000, "FEE", 0, "FEE");
+    await stake.methods.startNewStakingInterval(1, 1000).send({from: operator(accounts)});
+    await stake.methods.setFeeToken(fee.address).send({from: accounts[0]});
+    await token.transfer(stake._address, 1000);
+    await stake.methods.setLevToken(token.address).send({from: accounts[0]});
+    try {
+      await Promise.all(accountsArray.map(account => transferAndStake(account, stake, token)))
+      console.log(`Done staking ${numberOfAccounts} accounts`);
+      console.log('Last block', (await web3.eth.getBlock('latest')).number);
+      await forceMine(new BN(1005));
+      await stake.methods.updateFeeForCurrentStakingInterval().send({from: operator(accounts), gas: 5e6});
+      let tx = stake.methods.redeemLevAndFeeToStakers(accountsArray);
+      let transaction = await tx.send({from: operator(accounts), gas: 5e6});
+      console.log('Gas used', transaction.gasUsed);
+      // require('fs').writeFileSync('transaction.json', JSON.stringify(transaction, null, 2));
+    } catch (e) { console.log('Got error redeem: ', e); }
+  });
 });
+
+async function transferAndStake(account, stake, token) {
+  await token.transfer(account, 100);
+  await token.approve(stake._address, 10, {from: account});
+  await stake.methods.stakeTokens(10).send({from: account});
+}
 
 contract('Calculate Fee Tokens', (accounts) => {
   let token, stake, fee;
