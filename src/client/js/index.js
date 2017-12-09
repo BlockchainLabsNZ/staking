@@ -1,235 +1,292 @@
-import React from 'react'
-import ReactDOM from 'react-dom'
-import Web3 from 'web3'
-import './../css/index.css'
-import {abi as stakeABI} from '../../../build/contracts/Stake.json'
-import {abi as levABI} from '../../../build/contracts/Token.json'
-import UserInformation from './UserInformation'
-import ProgressBar from './ProgressBar'
-import Header from './Header'
-import Actions from './Actions'
-import Helper from './Helper'
+const $ = require("jquery");
+require("jquery-easing");
+require("./templates");
+const clipboard = require("clipboard-polyfill");
+const contract = require("./contract");
+const socket = require("./socket-client");
 
-class App extends React.Component {
-  constructor() {
-    super();
+module.exports = (function () {
+  let client = {};
+  let errorFlag = false;
+  let currentForm;
+  let nextForm;
+  let previousForm;
+  let left;
+  let opacity;
+  let scale;
+  let animating;
 
-    this.state = {
-      loadingInitialData: true
-    };
 
-    this.init()
-  }
+  client.stakingForm = function () {
 
-  // Special function from React that gets executed when the component is loaded
-  componentDidMount() {
-    // To activate additional information when the user hovers the data-toggle="tooltip" element
-    $('[data-toggle="tooltip"]').tooltip()
-  }
+    $(".next").click(nextScreen);
 
-  async init() {
-    let response = await fetch('/api/v1/config', {
-      method: 'GET'
+    // $("#progressbar li").click(function () {
+    //   console.log($(this).index());
+    //
+    //   let currentForm = $("fieldset.active");
+    //   let prevForm = currentForm.prev();
+    //   let nextFrom = currentForm.next();
+    //
+    //   currentForm.animate({opacity: 0}, {
+    //     step: function (now, mx) {
+    //       //as the opacity of currentForm reduces to 0 - stored in "now"
+    //       //1. scale previousForm from 80% to 100%
+    //       scale = 0.8 + (1 - now) * 0.2;
+    //       //2. take currentForm to the right(50%) - from 0%
+    //       left = ((1 - now) * 50) + "%";
+    //       //3. increase opacity of previousForm to 1 as it moves in
+    //       opacity = 1 - now;
+    //       currentForm.css({'left': left});
+    //       prevForm.css({'transform': 'scale(' + scale + ')', 'opacity': opacity});
+    //     },
+    //     duration: 800,
+    //     complete: function () {
+    //       currentForm.hide();
+    //       animating = false;
+    //     },
+    //     //this comes from the custom easing plugin
+    //     easing: 'easeInOutBack'
+    //   });
+    //
+    //   $("fieldset").eq($(this).index()).show();
+    // })
+
+    $(".previous").click(function () {
+      if (animating) return false;
+      animating = true;
+
+      currentForm = $(this).parent();
+      previousForm = $(this).parent().prev();
+
+      $("#progressbar li").eq($("fieldset").index(currentForm)).removeClass("active");
+
+      previousForm.show();
+      currentForm.animate({opacity: 0}, {
+        step: function (now, mx) {
+          //as the opacity of currentForm reduces to 0 - stored in "now"
+          //1. scale previousForm from 80% to 100%
+          scale = 0.8 + (1 - now) * 0.2;
+          //2. take currentForm to the right(50%) - from 0%
+          left = ((1 - now) * 50) + "%";
+          //3. increase opacity of previousForm to 1 as it moves in
+          opacity = 1 - now;
+          currentForm.css({'left': left});
+          previousForm.css({'transform': 'scale(' + scale + ')', 'opacity': opacity});
+        },
+        duration: 800,
+        complete: function () {
+          currentForm.hide();
+          animating = false;
+        },
+        //this comes from the custom easing plugin
+        easing: 'easeInOutBack'
+      });
     });
 
-    window.config = await response.json();
-    window.web3 = new Web3(window.web3 ? window.web3.currentProvider : new Web3.providers.HttpProvider(config.network));
-    window.stake = new web3.eth.Contract(stakeABI, config.stake);
-    window.lev = new web3.eth.Contract(levABI, config.lev);
-		const account = localStorage.account
-
-		await this.updateInitialInformation()
-		if(account) await this.getInfo(account)
-  }
-
-	async updateInitialInformation() {
-		this.setState({updateInitialInformation: true})
-		let startBlock = await stake.methods.startBlock().call();
-    let endBlock = await stake.methods.endBlock().call();
-    let currentBlock = (await web3.eth.getBlock('latest')).number;
-    let percentage = currentBlock >= endBlock ? 100 : (currentBlock - startBlock) * 100 / (endBlock - startBlock);
-
-    this.setState({
-      startBlock: startBlock,
-      endBlock: endBlock,
-      barPercentage: percentage,
-      stakeAddress: config.stake,
-      levAddress: config.lev,
-      feeAddress: config.fee,
-      loadingInitialData: false,
-      sale: config.sale,
-      feeDecimals: config.feeDecimals,
-      levDecimals: config.levDecimals,
-			updateInitialInformation: false,
+    $(".submit").click(function () {
+      return false;
     })
-	}
 
-  static levActualToDisplay(amount) {
-    return (amount / Math.pow(10, config.levDecimals)).toFixed(config.levDecimals);
-  }
+    // $(".lev-count").click(function() {
+    //   let levCount = $(this).text();
+    //
+    //   $(this).parent().find("input").value(levCount);
+    // })
 
-  static feeActualToDisplay(amount) {
-    return (amount / Math.pow(10, config.feeDecimals)).toFixed(config.feeDecimals);
-  }
+  };
 
-  static levDisplayToActuals(amount) {
-    return Math.floor(amount * Math.pow(10, config.levDecimals));
-  }
+  client.toggleModal = function () {
+    let openModal;
+    let closeButton;
+    let modalBody;
+    let htmlBody;
 
-  static feeDisplayToActuals(amount) {
-    return Math.floor(amount * Math.pow(10, config.feeDecimals));
-  }
+    closeButton = $(".close-button");
+    openModal = $(".js-open-modal");
+    modalBody = $(".instructions");
+    htmlBody = $("html, body");
 
-  async getInfo(account) {
-    return new Promise(async (resolve, reject) => {
-      let startBlock = await stake.methods.startBlock().call();
-      let endBlock = await stake.methods.endBlock().call();
-      let currentBlock = (await web3.eth.getBlock('latest')).number;
-      let percentage = currentBlock >= endBlock ? 100 : (currentBlock - startBlock) * 100 / (endBlock - startBlock);
-			let feeCalculated = await stake.methods.feeCalculated().call();
-			let levToWithdraw;
-			let feeToWithdraw;
+    openModal.on("click", function () {
+      modalBody.addClass("active");
+      htmlBody.addClass("modal-open");
+    });
 
-			const stakingExpired = currentBlock > endBlock;
-
-			if(!stakingExpired || (stakingExpired && !feeCalculated)) {
-				levToWithdraw = 0
-				feeToWithdraw = 0
-			} else if(stakingExpired && feeCalculated) {
-				const levBlock = await stake.methods.levBlocks(account).call();
-				const feeForTheStakingInterval = await stake.methods.feeForTheStakingInterval().call();
-				const totalLevBlocks = await stake.methods.totalLevBlocks().call();
-
-				levToWithdraw = App.levActualToDisplay(await stake.methods.stakes(account).call());
-				if(Number(levBlock) === 0 || Number(feeForTheStakingInterval) === 0 || Number(totalLevBlocks) === 0) {
-					feeToWithdraw = App.feeActualToDisplay(0)
-				} else {
-					feeToWithdraw = App.feeActualToDisplay(levBlock * feeForTheStakingInterval / totalLevBlocks);
-				}
-			}
-
-			localStorage.setItem('account', account)
-
-      this.setState({
-        account: account,
-        numberOfLev: `${App.levActualToDisplay(await lev.methods.balanceOf(account).call())}`,
-        stakedLev: `${App.levActualToDisplay(await stake.methods.stakes(account).call())}`,
-        approvedLev: `${App.levActualToDisplay(await lev.methods.allowance(account, stake._address).call())}`,
-        startBlock: startBlock,
-        endBlock: endBlock,
-        barPercentage: percentage,
-				levToWithdraw,
-				feeToWithdraw,
-      }, resolve)
+    closeButton.on("click", function () {
+      modalBody.removeClass("active");
+      htmlBody.removeClass("modal-open");
     })
+  };
+
+  client.rememberState = function () {
+    console.log("client.rememberState function");
+  };
+
+  client.detectDevice = function () {
+    console.log("client.detectDevice function");
+  };
+
+  client.removeLoading = function () {
+    let overlay;
+
+    overlay = $('.overlay');
+    setTimeout(function () {
+      overlay.addClass('overlay__invisible');
+    }, 3000);
   }
 
-  // To approve 100 LEV tokens to the stake contract from the user address
-  async approve(amount) {
-    let tx = await lev.methods.approve(this.state.stakeAddress, amount);
-    const estimateGas = await tx.estimateGas();
-    const data = tx.encodeABI();
+  $(document).ready(function () {
+    init();
+  });
 
-    this.setState({
-      transactionFieldsTo: lev._address,
-      transactionFieldsAmount: 0,
-      transactionFieldsGasLimit: estimateGas,
-      transactionFieldsData: data,
-      showTransactionFields: true
+  function init() {
+    client.stakingForm();
+    client.toggleModal();
+    client.detectDevice();
+    client.rememberState();
+    if (!contract.isMetaMask()) {
+      $("#choice-metamask").attr("disabled", true);
+      $("#choice-manual").prop("checked", true)
+    }
+    client.setup();
+    client.setEvents();
+    client.removeLoading();
+  }
+
+  client.setup = function () {
+    $("#user-id").val(contract.user);
+    $.each($(".user-info"), (i, ele) => $(ele).userInfo());
+    $("#stake-tx-info").txInfo("stake");
+    $("#approve-tx-info").txInfo("approve");
+
+    socket.on('state', async function (data) {
+      let text = data.current > data.end ? "expired" : `${data.end - data.current} blocks left`;
+      $("#staking-status").text(text)
     })
-  }
-
-  async stakeTokens(stakeAmount) {
-    let tx = await stake.methods.stakeTokens(stakeAmount);
-    const estimateGas = await tx.estimateGas();
-    const data = tx.encodeABI();
-
-    this.setState({
-      transactionFieldsTo: stake._address,
-      transactionFieldsAmount: 0,
-      transactionFieldsGasLimit: estimateGas,
-      transactionFieldsData: data,
-      showTransactionFields: true
+    socket.on('user-update', function (data) {
+      console.log('user-update');
+      displayUserInfo();
     })
+  };
+
+  client.setEvents = function () {
+    $("#choose-action").click(chooseMethod);
+    $("[data-id=user-info-display-action]").click(displayUserInfo);
+    $("[data-id=approve-action]").click(approve);
+    $("#stake-action").click(stake);
+    $(".icon-link").click(copy);
+  };
+
+  function copy() {
+    let text = $(this).parent().find("span").first().text();
+    clipboard.writeText(text);
   }
 
-  render() {
-    return (
-      <div>
-        <Header/>
-
-        <ProgressBar
-          className={this.state.loadingInitialData ? 'hidden' : ''}
-          stakeAddress={this.state.stakeAddress}
-          levAddress={this.state.levAddress}
-          feeAddress={this.state.feeAddress}
-          barPercentage={this.state.barPercentage}
-          startBlock={this.state.startBlock}
-          endBlock={this.state.endBlock}
-					account={this.state.account}
-					updateInitialInformation={this.state.updateInitialInformation}
-					updateGetInfo={() => {
-						this.updateInitialInformation()
-						this.getInfo(this.state.account)
-					}}
-        />
-
-        <div className={this.state.loadingInitialData ? 'row justify-content-center' : 'hidden'}>
-          <p>Loading initial data make sure you're on the Ropsten test network, please wait...</p>
-        </div>
-
-        <div className={this.state.loadingInitialData ? 'hidden' : 'container'}>
-          <div className="row">
-            <UserInformation
-              className="col-md-6 user-information-box"
-              isUpdatingStakeData={this.state.isUpdatingStakeData}
-              getInfo={account => {
-                this.getInfo(account)
-              }}
-              account={this.state.account}
-              numberOfLev={this.state.numberOfLev}
-              stakedLev={this.state.stakedLev}
-              approvedLev={this.state.approvedLev}
-							levToWithdraw={this.state.levToWithdraw}
-							feeToWithdraw={this.state.feeToWithdraw}
-            />
-
-            <Actions
-              className="col-md-6 actions-box border border-secondary rounded"
-              setStakeAmount={state => {
-                state.stakeAmount = App.levDisplayToActuals(state.stakeAmount);
-                this.setState(state)
-              }}
-              approve={amount => {
-                this.approve(amount)
-              }}
-              stakeTokens={amount => {
-                this.stakeTokens(amount)
-              }}
-              transactionFieldsTo={this.state.transactionFieldsTo}
-              transactionFieldsAmount={this.state.transactionFieldsAmount}
-              transactionFieldsGasLimit={this.state.transactionFieldsGasLimit}
-              transactionFieldsData={this.state.transactionFieldsData}
-              isUpdatingAllowance={this.state.isUpdatingAllowance}
-              allowance={this.state.allowance}
-              customAccount={this.state.customAccount}
-              stakeAmount={this.state.stakeAmount}
-              showTransactionFields={this.state.showTransactionFields}
-              account={this.state.account}
-            />
-          </div>
-          <br/>
-
-          <div className="row">
-            <Helper sale={this.state.sale}/>
-          </div>
-        </div>
-      </div>
-    )
+  function chooseMethod() {
+    let self = this;
+    let isManual = $("#choice-manual").is(":checked");
+    contract.setManual(isManual).then(function () {
+      $("#user-id").attr("readonly", !isManual).val(contract.user);
+    })
+      .then(nextScreen.bind(self))
+      .catch(handle);
   }
-}
 
-ReactDOM.render(
-  <App/>,
-  document.querySelector('#root')
-);
+  function displayUserInfo() {
+    let user = $("#user-id").val();
+    contract.setUser(user);
+    let self = this;
+    contract.updateUserInfo().then(function () {
+      updateUserInfo();
+      socket.emit('register', {userid: user})
+    }).then(showClick.bind(self))
+      .catch(handle)
+  }
+
+  function updateUserInfo() {
+    let userInfo = contract.getUserInfo();
+    $("[name=lev-count]").text(userInfo.lev);
+    $("[name=staked-count]").text(userInfo.staked);
+    $("[name=approved-count]").text(userInfo.approved);
+    $("[name=fee-count]").text(userInfo.fee);
+  }
+
+  function approve() {
+    let tokens = $("#approve-count").val() - 0;
+    let self = this;
+    contract.getApproveInfo(tokens).then(function (info) {
+      $("#approve-address").text(info.address);
+      $("#approve-amount").text(info.amount);
+      $("#approve-gas").text(info.gas);
+      $("#approve-data").text(info.data);
+    }).then(() => contract.approve(tokens))
+      .then(showClick.bind(self))
+      .catch(handle);
+  }
+
+  function stake() {
+    let tokens = $("#stake-count").val() - 0;
+    let self = this;
+    contract.getStakeInfo(tokens).then(function (info) {
+      $("#stake-address").text(info.address);
+      $("#stake-amount").text(info.amount);
+      $("#stake-gas").text(info.gas);
+      $("#stake-data").text(info.data);
+    }).then(() => contract.stake(tokens))
+      .then(showClick.bind(self))
+      .catch(handle);
+  }
+
+  function handle(e) {
+    errorFlag = true;
+    let $error = $(".error-container");
+    $error.text(e.message);
+    $error.fadeIn();
+    setTimeout(function () {
+      $(".error-container").fadeOut();
+    }, 2500);
+  }
+
+  function showClick() {
+    // if(errorFlag) return;
+    // $(this).addClass("hidden");
+    let $element = $(this)
+    $element.parent().find(".eth-info").addClass("active");
+    $element.nextAll(".action-button").removeClass("hidden");
+    $element.hasClass("show") ? $element.addClass("hidden") : "";
+  }
+
+  function nextScreen() {
+    if (animating) return false;
+    animating = true;
+
+    currentForm = $(this).parent();
+    nextForm = $(this).parent().next();
+
+    console.log(currentForm);
+
+    $("#progressbar li").eq($("fieldset").index(nextForm)).addClass("active");
+    $("fieldset").removeClass("active");
+    nextForm.addClass('active');
+    nextForm.show();
+    currentForm.animate({opacity: 0}, {
+      step: function (now, mx) {
+        scale = 1 - (1 - now) * 0.2;
+        left = (now * 50) + "%";
+        opacity = 1 - now;
+        currentForm.css({
+          'transform': 'scale(' + scale + ')',
+          'position': 'absolute'
+        });
+        nextForm.css({'left': left, 'opacity': opacity});
+      },
+      duration: 800,
+      complete: function () {
+        currentForm.hide();
+        animating = false;
+      },
+      easing: 'easeInOutBack'
+    });
+  }
+
+})();

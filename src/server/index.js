@@ -1,9 +1,10 @@
 const express = require('express');
 const compress = require('compression');
 const helmet = require('helmet');
-const config = require('config');
+const config = require('./conf');
 const util = require('util');
 const api = require('./api');
+const socketApi = require('./socketApi');
 
 module.exports = (async function () {
   let leverj = {};
@@ -17,6 +18,14 @@ module.exports = (async function () {
   app.use(helmet({frameguard: {action: 'deny'}}));
   app.use(helmet.noCache());
   app.use(helmet.xssFilter());
+  app.use(helmet.contentSecurityPolicy(
+    {
+      directives: config.csp.directives,
+      reportOnly: false,
+      setAllHeaders: false,
+      disableAndroid: false
+    }
+  ))
   app.use("/api/v1", api);
   app.use(compress());
 
@@ -40,11 +49,12 @@ module.exports = (async function () {
       util.log(err.stack);
       util.log('################################## uncaught exception ######################################')
     })
+    socketApi.connect(server);
   }
 
   init();
   return leverj
-})().catch(function(e){
+})().catch(function (e) {
   console.log(e);
   process.exit(1);
-})
+});

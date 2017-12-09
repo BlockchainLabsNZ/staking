@@ -1,9 +1,10 @@
 const affirm = require("affirm.js");
 const browserUtil = require("./browserUtil");
 const Web3 = require('web3');
-const feeABI = require("../../build/contracts/Fee.json").abi;
-const levABI = require("../../build/contracts/Token.json").abi;
-const stakeABI = require("../../build/contracts/Stake.json").abi;
+const feeABI = require("../../../build/contracts/Fee.json").abi;
+const levABI = require("../../../build/contracts/Token.json").abi;
+const stakeABI = require("../../../build/contracts/Stake.json").abi;
+
 
 module.exports = (function () {
   let contract = {};
@@ -34,10 +35,11 @@ module.exports = (function () {
     let result = await Promise.all([
       lev.methods.balanceOf(contract.user).call(),
       stake.methods.stakes(contract.user).call(),
-      lev.methods.allowance(contract.user, config.stake).call()
+      lev.methods.allowance(contract.user, config.stake).call(),
+      fee.methods.balanceOf(contract.user).call()
     ]);
     result = result.map(num => ((num - 0) / Math.pow(10, config.levDecimals)).toFixed(config.levDecimals) - 0);
-    userInfo = {lev: result[0], staked: result[1], approved: result[2]};
+    userInfo = {lev: result[0], staked: result[1], approved: result[2], fee:result[3]};
   };
 
   contract.getApproveInfo = async function (levCounts) {
@@ -83,7 +85,13 @@ module.exports = (function () {
   };
 
   async function setUser() {
-    if (!contract.isManual) contract.user = (await web3.eth.getAccounts())[0];
+    if (!contract.isManual) {
+      let accounts = await web3.eth.getAccounts();
+      if(accounts.length === 0){
+        throw new Error('METAMASK is locked. Please unlock it');
+      }
+      contract.user = accounts[0];
+    }
   }
 
   async function init() {
