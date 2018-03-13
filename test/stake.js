@@ -57,29 +57,19 @@ contract('Calculate Fee Tokens', (accounts) => {
   let wallet;
 
   before(async function () {
-    console.log('count me father');
     [stake, fee, token] = await setup(accounts);
-    console.log('count me father');
     await stake.setLevToken(token.address);
-    console.log('count me father');
     wallet = await stake.wallet();
-    console.log('count me father');
     await web3.eth.sendTransaction({
       from: wallet,
       to: user3(accounts),
-      value: new BN("999999999990000000000000000", 10)
+      value: new BN("9000", 10)
     });
-    console.log('count me father');
     await forceMine(new BN(200));
-    console.log('count me father');
     await stakeit(10, user1(accounts), stake, token);
-    console.log('count me father');
     await stakeit(15, user2(accounts), stake, token);
-    console.log('count me father');
     await forceMine(new BN(300));
-    console.log('count me father');
     await sendFeesToSelf(stake.address, await stake.owners(0), fee, 1000);
-    console.log('count me father');
     await web3.eth.sendTransaction({from: user1(accounts), to: stake.address, value: 10000000});
   });
 
@@ -91,7 +81,7 @@ contract('Calculate Fee Tokens', (accounts) => {
     expect((await stake.feeForTheStakingInterval()).toNumber()).to.eql(11000);
     expect((await fee.balanceOf(stake.address)).toNumber()).to.eql(0);
     let walletNewBalance = (await web3.eth.getBalance(wallet));
-    expect(walletNewBalance - walletBalance).to.eql(10000000);
+    expect(walletNewBalance - walletBalance).to.eql(0);
   });
 });
 
@@ -106,7 +96,7 @@ contract('Calculate fee tokens when no eth and fee has been collected', (account
     await web3.eth.sendTransaction({
       from: wallet,
       to: user3(accounts),
-      value: new BN("999999999990000000000000000", 10)
+      value: new BN("9000", 10)
     });
     await forceMine(new BN(200));
     await stakeit(10, user1(accounts), stake, token);
@@ -145,15 +135,10 @@ contract('Circulate Fee Tokens', (accounts) => {
 
   it('Stake contract should be able to send Fee and Lev to User', async function () {
     await stake.redeemLevAndFeeByStaker({from: user1(accounts)});
-    console.log('which line 1');
     expect((await token.balanceOf(user1(accounts))).toNumber()).to.eql(100);
-    console.log('which line 2');
     expect((await fee.balanceOf(user1(accounts))).toNumber()).to.eql(4454);
-    console.log('which line 3');
     expect((await stake.stakes(user1(accounts))).toNumber()).to.eql(0);
-    console.log('which line 6');
     expect((await stake.levBlocks(user1(accounts))).toNumber()).to.eql(0);
-    console.log('which line 7');
     expect((await stake.totalLevs()).toNumber()).to.eql(15);
   });
 });
