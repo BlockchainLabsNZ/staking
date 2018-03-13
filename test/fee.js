@@ -10,6 +10,10 @@ const ethRPC = new EthRPC(new HttpProvider('http://localhost:8545'));
 const ethQuery = new EthQuery(new HttpProvider('http://localhost:8545'));
 const web3 = new Web3(new Web3.providers.HttpProvider('http://localhost:8545'));
 
+function owners(accounts) {
+  return [accounts[0], accounts[1], accounts[2]];
+}
+
 contract('generate and send fee', (accounts) => {
   let fee;
   let minter = accounts[4];
@@ -17,7 +21,7 @@ contract('generate and send fee', (accounts) => {
   let user2 = accounts[2];
   let user3 = accounts[3];
   before(async function () {
-    fee = await Fee.deployed();
+    fee = await Fee.new(owners(accounts), 'FEE', 9, 'FEE');
     await fee.setMinter(minter)
   });
   it('minter should be able to send fee', async function () {
@@ -50,7 +54,7 @@ contract('burn tokens', (accounts) => {
   let user1 = accounts[1];
   let user2 = accounts[2];
   before(async function () {
-    fee = await Fee.deployed();
+    fee = await Fee.new(owners(accounts), 'FEE', 9, 'FEE');
     await fee.setMinter(minter);
     await fee.sendTokens(user1, 1000, {from: minter});
     await fee.sendTokens(user2, 1100, {from: minter})

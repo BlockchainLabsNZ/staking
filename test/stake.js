@@ -14,15 +14,19 @@ const Web3 = require('web3');
 const ethRPC = new EthRPC(new HttpProvider('http://localhost:8545'));
 const ethQuery = new EthQuery(new HttpProvider('http://localhost:8545'));
 const web3 = new Web3(new Web3.providers.HttpProvider('http://localhost:8545'));
+let token, stake, fee;
+
+function owners(accounts) {
+  return [accounts[0], accounts[1], accounts[2]];
+}
 
 contract('Stake Levs', (accounts) => {
-  let token, stake;
 
   before(async function () {
     token = await HumanStandardToken.new(100000, "LEV", 0, "LEV");
     await token.transfer(user1(accounts), 100);
     await token.transfer(user2(accounts), 200);
-    stake = await Stake.deployed();
+    stake = await Stake.new(owners(accounts), accounts[6], accounts[5], 1000, token.address);
     await stake.startNewStakingInterval(100, 300, {from: operator(accounts)});
     await token.transfer(stake.address, 1000);
     await stake.setLevToken(token.address);
@@ -30,7 +34,7 @@ contract('Stake Levs', (accounts) => {
   });
 
   it('user should be able to put tokens for stake', async function () {
-    stake = await Stake.deployed();
+    // stake = await Stake.deployed();
     await stakeit(10, user1(accounts), stake, token);
     await stakeit(15, user2(accounts), stake, token);
     await forceMine(new BN(250));
@@ -49,32 +53,42 @@ contract('Stake Levs', (accounts) => {
 });
 
 contract('Calculate Fee Tokens', (accounts) => {
-  let token, stake, fee;
+  // let token, stake, fee;
   let wallet;
 
   before(async function () {
+    console.log('count me father');
     [stake, fee, token] = await setup(accounts);
+    console.log('count me father');
     await stake.setLevToken(token.address);
+    console.log('count me father');
     wallet = await stake.wallet();
+    console.log('count me father');
     await web3.eth.sendTransaction({
       from: wallet,
       to: user3(accounts),
       value: new BN("999999999990000000000000000", 10)
     });
+    console.log('count me father');
     await forceMine(new BN(200));
+    console.log('count me father');
     await stakeit(10, user1(accounts), stake, token);
+    console.log('count me father');
     await stakeit(15, user2(accounts), stake, token);
+    console.log('count me father');
     await forceMine(new BN(300));
+    console.log('count me father');
     await sendFeesToSelf(stake.address, await stake.owners(0), fee, 1000);
+    console.log('count me father');
     await web3.eth.sendTransaction({from: user1(accounts), to: stake.address, value: 10000000});
   });
 
 
   it('Stake contract should be able to calculate total Fee Tokens based on trading', async function () {
     let walletBalance = (await web3.eth.getBalance(wallet));
-    stake = await Stake.deployed();
+    // stake = await Stake.deployed();
     await stake.updateFeeForCurrentStakingInterval({from: operator(accounts)});
-    expect((await stake.feeForTheStakingInterval()).toNumber()).to.eql(1010);
+    expect((await stake.feeForTheStakingInterval()).toNumber()).to.eql(11000);
     expect((await fee.balanceOf(stake.address)).toNumber()).to.eql(0);
     let walletNewBalance = (await web3.eth.getBalance(wallet));
     expect(walletNewBalance - walletBalance).to.eql(10000000);
@@ -103,9 +117,9 @@ contract('Calculate fee tokens when no eth and fee has been collected', (account
   });
 
 
-  it('Stake contract should be able to calculate total Fee Tokens  even if there is no eth as commission', async function () {
+  it('Stake contract should be able to calculate total Fee Tokens even if there is no eth as commission', async function () {
     let walletBalance = (await web3.eth.getBalance(wallet));
-    stake = await Stake.deployed();
+    // stake = await Stake.deployed();
     await stake.updateFeeForCurrentStakingInterval({from: operator(accounts)});
     expect((await stake.feeForTheStakingInterval()).toNumber()).to.eql(0);
     expect((await fee.balanceOf(stake.address)).toNumber()).to.eql(0);
@@ -131,10 +145,15 @@ contract('Circulate Fee Tokens', (accounts) => {
 
   it('Stake contract should be able to send Fee and Lev to User', async function () {
     await stake.redeemLevAndFeeByStaker({from: user1(accounts)});
+    console.log('which line 1');
     expect((await token.balanceOf(user1(accounts))).toNumber()).to.eql(100);
-    expect((await fee.balanceOf(user1(accounts))).toNumber()).to.eql(409);
+    console.log('which line 2');
+    expect((await fee.balanceOf(user1(accounts))).toNumber()).to.eql(4454);
+    console.log('which line 3');
     expect((await stake.stakes(user1(accounts))).toNumber()).to.eql(0);
+    console.log('which line 6');
     expect((await stake.levBlocks(user1(accounts))).toNumber()).to.eql(0);
+    console.log('which line 7');
     expect((await stake.totalLevs()).toNumber()).to.eql(15);
   });
 });
@@ -213,11 +232,11 @@ async function sendFeesToSelf(_to, _owner, _fee, _qty) {
 }
 
 async function setup(accounts) {
-  let stake = await Stake.deployed();
-  let fee = await Fee.deployed();
+  stake = await Stake.new(owners(accounts), accounts[6], accounts[0], 1000, token.address);
+  fee = await Fee.new(owners(accounts), 'FEE', 9, 'FEE');
   await fee.setMinter(stake.address);
   await stake.setFeeToken(fee.address);
-  let token = await HumanStandardToken.new(100000, "LEV", 0, "LEV");
+  token = await HumanStandardToken.new(100000, "LEV", 0, "LEV");
   // token = await HumanStandardToken.at(token.address);
   await token.transfer(user1(accounts), 100);
   await token.transfer(user2(accounts), 200);
